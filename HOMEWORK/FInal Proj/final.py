@@ -343,11 +343,12 @@ def StartSim():
 field = Field(window)
 
 infoscreen = InfoScreen(window)
-gameinfo = GameInformation(window, infoscreen.getframe())
-fieldinfo = FieldInfo(window, infoscreen.getframe())
-settings = RobotSettings(window, infoscreen.getframe())
-simsetup = SimulationSetup(window, infoscreen.getframe())
-controller = Controller(window, infoscreen.getframe())
+infoframe = infoscreen.getframe()
+gameinfo = GameInformation(window, infoframe)
+fieldinfo = FieldInfo(window, infoframe)
+settings = RobotSettings(window, infoframe)
+simsetup = SimulationSetup(window, infoframe)
+controller = Controller(window, infoframe)
 robot1 = Robot(field, 0, 75, 0, "#FF4E4E")
 robot2 = Robot(field, 0, 300, 0, "#FF4E4E")
 
