@@ -63,14 +63,18 @@ class Controller:
         self.start = tk.Button(self.controller, text="Start Simulation", width=10, height=2, padx=20, pady=5, bg="#00B82B", font=("bahnschrift", 12), fg="white", command= lambda: StartSim())
         self.start.grid(row=1, column=0, padx=10, pady=10)
         
-        self.pause = tk.Button(self.controller, text="Pause Simulation", width=10, height=2, padx=20, pady=5, bg="#C5B90A", font=("bahnschrift", 12), fg="white")
+        self.pause = tk.Button(self.controller, text="Pause Simulation", width=10, height=2, padx=20, pady=5, bg="#C5B90A", font=("bahnschrift", 12), fg="white", command= lambda: PauseSim())
         self.pause.grid(row=1, column=1, padx=10, pady=10)
         
-        self.stop = tk.Button(self.controller, text="Stop Simulation", width=10, height=2, padx=20, pady=5, bg="#B80000", font=("bahnschrift", 12), fg="white")
+        self.stop = tk.Button(self.controller, text="Stop Simulation", width=10, height=2, padx=20, pady=5, bg="#B80000", font=("bahnschrift", 12), fg="white", command= lambda: StopSim())
         self.stop.grid(row=1, column=2, padx=10, pady=10)
         
     def getframe(self):
         return self.controller
+    
+    def changePausebutton(self, text):
+        newtext = "{} Simulation".format(text)
+        self.pause.config(text=newtext, bg="#00B82B" if text == "Resume" else "#C5B90A", command= lambda: StartSim() if text == "Resume" else PauseSim())
         
 
 class GameInformation:
@@ -119,6 +123,10 @@ class GameInformation:
         self.ourscore = ourscore
         self.enemyscore = enemyscore
         self.formattedscore.set("{} - {}".format(self.ourscore, self.enemyscore))
+    
+    def reset(self):
+        self.formattedtime.set("00:00")
+        self.formattedscore.set("0 - 0")
         
 class FieldInfo:
     def __init__(self, window, frame):
@@ -286,7 +294,22 @@ class SimulationSetup:
         self.horizontal = ttk.Separator(self.simsetupframe, orient="horizontal")
         self.horizontal.pack(side="top", fill="both", padx=10, pady=5)
                 
-        
+class Football:
+    def __init__(self, field, x, y):
+        self.canvas = field.getcanvas()
+        self.Canvaswidth = field.getsize()[0]
+        self.Canvasheight = field.getsize()[1]
+        self.x = x + self.Canvaswidth/2
+        self.y = y
+        self.r = 13
+        self.createball()
+    
+    def createball(self):
+        self.ball = self.canvas.create_oval(self.x - self.r, self.y - self.r, self.x + self.r, self.y + self.r, fill="#424242", outline="white", width=2)
+    
+    def getPos(self):
+        return (self.x, self.y)
+               
 
 class Robot:
     def __init__(self, field, x, y, speed, color):
@@ -330,15 +353,49 @@ class Robot:
         self.changePos(self.x, self.y)
 
 def StartSim():
+    global startsim
+    global pausesim
+    
     initialtime = time.time()
     ourscore = 0
     enemyscore = 0
-    
-    while True:
-        robot1.move(0, 50)
+    startsim = True
+    pausesim = False
+    while startsim:
+        print("sim paused", pausesim)
+        if pausesim:
+            controller.changePausebutton("Resume")
+        else:
+            controller.changePausebutton("Pause")
         window.update()
-        gameinfo.starttimer(initialtime)
-        gameinfo.setscore(ourscore, enemyscore)
+
+        while not pausesim:
+            robot1.move(0, 50)
+            window.update()
+            gameinfo.starttimer(initialtime)
+            gameinfo.setscore(ourscore, enemyscore)
+            lasttime = time.time()
+        
+        initialtime += time.time() - lasttime
+def StopSim():
+    global startsim
+    global pausesim
+    
+    pausesim = True
+    startsim = False
+    controller.changePausebutton("Pause")
+    gameinfo.reset()
+
+def PauseSim():
+    global pausesim
+    pausesim = True
+    
+def ResumeSim():
+    global pausesim
+    pausesim = False
+
+startsim = False
+pausesim = False
     
 field = Field(window)
 
@@ -351,6 +408,6 @@ simsetup = SimulationSetup(window, infoframe)
 controller = Controller(window, infoframe)
 robot1 = Robot(field, 0, 75, 0, "#FF4E4E")
 robot2 = Robot(field, 0, 300, 0, "#FF4E4E")
-
+football = Football(field, 0, field.getsize()[1]/2)
     
 window.mainloop()
