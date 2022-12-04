@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
+from tkinter import messagebox
 import math
 import time
 
@@ -8,6 +9,27 @@ window.title("Robot omni-wheels Soccer Simulation")
 window.geometry("1200x800")
 window.resizable(False, False)
 
+class IncrementPositiveError(Exception):
+    pass
+
+class IncrementValueError(Exception):
+    pass
+
+class IncrementStepError(Exception):
+    pass
+
+def checkIncrement(increment):
+    try:
+        increment = float(increment)
+    except ValueError:
+        raise IncrementValueError("Increment must be a number")
+    
+    
+    if increment <= 0:
+        raise IncrementPositiveError("Increment must be positive")
+    elif increment < 0.001:
+        raise IncrementStepError("Increment must be greater than 0.001")
+    
 class Field:
     def __init__(self, window):
         self.window = window
@@ -132,6 +154,8 @@ class FieldInfo:
     def __init__(self, window, frame):
         self.window = window
         self.frame = frame
+        self.frictionval = tk.StringVar()
+        self.frictionval.set(0.0)
         self.fieldinfoframe = tk.Frame(self.frame)
         self.fieldinfoframe.pack(side="top", fill="both", padx=10)
         
@@ -143,7 +167,7 @@ class FieldInfo:
         self.frictioninfoframe = tk.Frame(self.infoframe)
         self.frictionlabel = tk.Label(self.frictioninfoframe, text="Current Field Friction: ", font=("bahnschrift", 12))
         self.frictionlabel.grid(row=0, column=0, padx=10, pady=10,sticky="w")
-        self.friction = tk.Label(self.frictioninfoframe, text="0", font=("bahnschrift", 16))
+        self.friction = tk.Label(self.frictioninfoframe, textvariable=self.frictionval, font=("bahnschrift", 16))
         self.friction.grid(row=0, column=1, padx=10, pady=10, sticky="w")
         self.frictioninfoframe.grid(row=0, column=0, sticky="w")
         
@@ -152,9 +176,9 @@ class FieldInfo:
         self.frictioncontrollabel.grid(row=0, column=0, padx=2, pady=10, sticky="w")
         self.increment = tk.Entry(self.frictioncontrolframe, width=3, font=("bahnschrift", 16), justify="center")
         self.increment.grid(row=0, column=1, padx=2, pady=10, sticky="w")
-        self.addincrement = tk.Button(self.frictioncontrolframe, text="+", width=2, height=1, padx=10, pady=5, bg="#00B82B", font=("bahnschrift", 12), fg="white")
+        self.addincrement = tk.Button(self.frictioncontrolframe, text="+", width=2, height=1, padx=10, pady=5, bg="#00B82B", font=("bahnschrift", 12), fg="white", command=lambda: self.changeFriction(self.increment.get(), True))
         self.addincrement.grid(row=0, column=2, padx=2, pady=10, sticky="w")
-        self.decreaseincrement = tk.Button(self.frictioncontrolframe, text="-", width=2, height=1, padx=10, pady=5, bg="#B80000", font=("bahnschrift", 12), fg="white")
+        self.decreaseincrement = tk.Button(self.frictioncontrolframe, text="-", width=2, height=1, padx=10, pady=5, bg="#B80000", font=("bahnschrift", 12), fg="white", command=lambda: self.changeFriction(self.increment.get(), False))
         self.decreaseincrement.grid(row=0, column=3, padx=2, pady=10, sticky="w")
         
         self.frictioncontrolframe.grid(row=0, column=1, padx=150, sticky="w")
@@ -163,7 +187,27 @@ class FieldInfo:
         self.infoframe.pack(side="top", fill="both", padx=10, pady=10)
         self.horizontal = ttk.Separator(self.fieldinfoframe, orient="horizontal")
         self.horizontal.pack(side="top", fill="both")
+    
+    def changeFriction(self, increment, increase):
+        try:
+            checkIncrement(increment)    
+        except IncrementPositiveError:
+            self.increment.delete(0, "end")
+            self.increment.insert(0, "0.0")
+            return
+        except IncrementStepError:
+            messagebox.showerror("Increment Error", "Increment must be more Than 0.001")
+            return
+        except IncrementValueError:
+            messagebox.showerror("Increment Error", "Increment must be a number")
+            return
         
+        if increase:
+            self.frictionval.set(round(float(self.frictionval.get()) + float(increment), 3))
+        else:
+            self.frictionval.set(round(float(self.frictionval.get()) - float(increment), 3))
+    
+    
 class RobotSettings:
     def __init__(self, window, frame):
         self.window = window
@@ -362,7 +406,6 @@ def StartSim():
     startsim = True
     pausesim = False
     while startsim:
-        print("sim paused", pausesim)
         if pausesim:
             controller.changePausebutton("Resume")
         else:
