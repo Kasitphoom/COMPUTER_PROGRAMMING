@@ -11,26 +11,19 @@ def ranking(dict):
 	temp_arr = []
 	new_dict = {}
 
-	dict = sorted(dict.items(), key = lambda x: x[1], reverse = True)
-
 	for i in dict:
-		temp_arr.append(i)
+		
+		found = False
+		
+		for j in range(len(temp_arr)):
 
-	# for i in dict:
+			if dict[i] >= temp_arr[j][1]:
+				found = True
+				temp_arr.insert(j, [i, dict[i]])
+				break
 		
-	# 	found = False
-		
-	# 	for j in range(len(temp_arr)):
-
-	# 		if dict[i] >= temp_arr[j][1]:
-	# 			found = True
-	# 			temp_arr.insert(j, [i, dict[i]])
-	# 			break
-		
-	# 	if not found:
-	# 		temp_arr.append([i, dict[i]])
-	
-	# print(temp_arr)	
+		if not found:
+			temp_arr.append([i, dict[i]])
  
 	for i in range(len(temp_arr)):
 	
@@ -41,4 +34,17 @@ def ranking(dict):
 
 	return new_dict
 
+def new_ranking(dict):
+	dict_sort = sorted(dict.items(), key = lambda x:x[1], reverse = True)
+ 
+	new_dict = {}
+	for i in range(len(dict)):
+		if dict_sort[i][1] == dict_sort[i-1][1]:
+			new_dict[i] = new_dict[i] + ", " + dict_sort[i][0]
+		else:
+			new_dict[i+1] = dict_sort[i][0]
+   
+	return new_dict
+
 print(ranking(popularity_score))
+print(new_ranking(popularity_score))

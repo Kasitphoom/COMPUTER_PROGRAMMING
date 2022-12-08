@@ -22,9 +22,9 @@ class SavingAccount:
 		return self.balance
 	
 	def print_statement(self):
-		print(f"{'Type':<8}\tAmount\tBalance\tPerson\tDate")
+		print(f"\n{'Type':-^10}|{'Amount':-^10}|{'Balance':-^10}|{'Person':-^10}|{'Date':-^10}")
 		for i in self.transaction_history:
-			print("{:<8}\t{}\t{}\t{}\t{}".format(i[0], i[1], i[2], i[3], i[4]))
+			print("{:<10}|{:<10}|{:<10}|{:<10}|{:<10}".format(i[0], i[1], i[2], i[3], i[4]))
 
 class OverDrawnAccount(SavingAccount):
 	def __init__(self, bank_name, acc_name, acc_id, balance, overdrawn_limit, transaction_history = []):
