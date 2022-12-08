@@ -1,1 +1,0 @@
-print(format(10, ".2f"))

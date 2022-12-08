@@ -212,6 +212,7 @@ class RobotSettings:
     def __init__(self, window, frame):
         self.window = window
         self.frame = frame
+        self.PIDValue = {}
         self.robotsettingsframe = tk.Frame(self.frame)
         self.robotsettingsframe.pack(side="top", fill="both", padx=10, pady=10)
         
@@ -224,7 +225,7 @@ class RobotSettings:
         self.addRobotinfo(1)
         
         self.seperator = ttk.Separator(self.controlframe, orient="vertical")
-        self.seperator.pack(side="left", fill="both", padx=10)
+        self.seperator.pack(side="left", fill="both", padx=5)
         
         self.addRobotinfo(2)
         
@@ -236,6 +237,18 @@ class RobotSettings:
         
     def addRobotinfo(self, robotID):
         self.robotID = robotID
+        self.PIDValue["Kp{}".format(self.robotID)] = tk.StringVar()
+        self.PIDValue["Kd{}".format(self.robotID)] = tk.StringVar()
+        self.PIDValue["Ki{}".format(self.robotID)] = tk.StringVar()
+        
+        self.Kpval = self.PIDValue["Kp{}".format(self.robotID)]
+        self.Kival = self.PIDValue["Ki{}".format(self.robotID)]
+        self.Kdval = self.PIDValue["Kd{}".format(self.robotID)]
+        
+        self.Kpval.set(0.0)
+        self.Kdval.set(0.0)
+        self.Kival.set(0.0)
+        
         self.robot1controlframe = tk.Frame(self.controlframe)
         label = "Robot " + str(self.robotID)
         self.robot1label = tk.Label(self.robot1controlframe, text=label, font=("bahnschrift", 16))
@@ -243,7 +256,7 @@ class RobotSettings:
         
         self.PIDframe = tk.Frame(self.robot1controlframe)
         # all add buttons
-        self.addKp = tk.Button(self.PIDframe, text="+", width=2, height=1, bg="#00B82B", font=("bahnschrift", 12), fg="white")
+        self.addKp = tk.Button(self.PIDframe, text="+", width=2, height=1, bg="#00B82B", font=("bahnschrift", 12), fg="white", command=lambda: self.changeKp(robotID, True))
         self.addKp.grid(row=0, column=1, padx=2, pady=2, sticky="w")
         self.addKi = tk.Button(self.PIDframe, text="+", width=2, height=1, bg="#00B82B", font=("bahnschrift", 12), fg="white")
         self.addKi.grid(row=0, column=2, padx=2, pady=2, sticky="w")
@@ -258,7 +271,7 @@ class RobotSettings:
         self.kpframe = tk.Frame(self.PIDframe)
         self.kplabel = tk.Label(self.kpframe, text="Kp: ", font=("bahnschrift", 12))
         self.kplabel.grid(row=0, column=0, sticky="w")
-        self.kp = tk.Label(self.kpframe, text="0", font=("bahnschrift", 16))
+        self.kp = tk.Label(self.kpframe, textvariable=self.Kpval, font=("bahnschrift", 16))
         self.kp.grid(row=0, column=1, pady=2, sticky="w")
         
         self.kpframe.grid(row=1, column=1, padx=2, pady=2, sticky="w")
@@ -267,7 +280,7 @@ class RobotSettings:
         self.kiframe = tk.Frame(self.PIDframe)
         self.kilabel = tk.Label(self.kiframe, text="Ki: ", font=("bahnschrift", 12))
         self.kilabel.grid(row=0, column=0, sticky="w")
-        self.ki = tk.Label(self.kiframe, text="0", font=("bahnschrift", 16))
+        self.ki = tk.Label(self.kiframe, textvariable=self.Kival, font=("bahnschrift", 16))
         self.ki.grid(row=0, column=1, pady=2, sticky="w")
         
         self.kiframe.grid(row=1, column=2, padx=2, pady=2, sticky="w")
@@ -276,7 +289,7 @@ class RobotSettings:
         self.kdframe = tk.Frame(self.PIDframe)
         self.kdlabel = tk.Label(self.kdframe, text="Kd: ", font=("bahnschrift", 12))
         self.kdlabel.grid(row=0, column=0, sticky="w")
-        self.kd = tk.Label(self.kdframe, text="0", font=("bahnschrift", 16))
+        self.kd = tk.Label(self.kdframe, textvariable=self.Kdval, font=("bahnschrift", 16))
         self.kd.grid(row=0, column=1, pady=2, sticky="w")
         
         self.kdframe.grid(row=1, column=3, padx=2, pady=2, sticky="w")
@@ -289,7 +302,7 @@ class RobotSettings:
         self.subtractKd = tk.Button(self.PIDframe, text="-", width=2, height=1, bg="#B80000", font=("bahnschrift", 12), fg="white")
         self.subtractKd.grid(row=2, column=3, padx=2, pady=2, sticky="w")
         
-        self.PIDframe.pack(side="top", fill="both", padx=10, pady=10)
+        self.PIDframe.pack(side="top", fill="both", pady=10)
         
         # options
         self.optionframe = tk.Frame(self.robot1controlframe)
@@ -307,6 +320,16 @@ class RobotSettings:
         
         self.optionframe.pack(side="top", fill="both", padx=10, pady=5)
         self.robot1controlframe.pack(side="left", fill="both", padx=35, pady=10)
+    
+    def changeKp(self, robotID, Increase):
+        if Increase:
+            kp = float(self.PIDValue["Kp{}".format(robotID)].get())
+            kp += 0.1
+            self.PIDValue["Kp{}".format(robotID)].set(round(kp, 1))
+        else:
+            kp = float(self.PIDValue["Kp{}".format(robotID)].get())
+            kp -= 0.1
+            self.PIDValue["Kp{}".format(robotID)].set(round(kp, 1))
         
 
 class SimulationSetup:
