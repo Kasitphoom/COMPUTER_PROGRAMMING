@@ -38,7 +38,7 @@ def new_ranking(dict):
 	dict_sort = sorted(dict.items(), key = lambda x:x[1], reverse = True)
  
 	new_dict = {}
-	for i in range(len(dict)):
+	for i in range(len(dict_sort)):
 		if dict_sort[i][1] == dict_sort[i-1][1]:
 			new_dict[i] = new_dict[i] + ", " + dict_sort[i][0]
 		else:
