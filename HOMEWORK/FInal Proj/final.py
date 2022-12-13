@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 from tkinter import messagebox
+import numpy as np
 import math
 import time
 
@@ -29,6 +30,10 @@ def checkIncrement(increment):
         raise IncrementPositiveError("Increment must be positive")
     elif increment < 0.001:
         raise IncrementStepError("Increment must be greater than 0.001")
+    
+def checknegative(number):
+    if number < 0:
+        raise ValueError("Number must be positive")
     
 class Field:
     def __init__(self, window):
@@ -96,7 +101,7 @@ class Controller:
     
     def changePausebutton(self, text):
         newtext = "{} Simulation".format(text)
-        self.pause.config(text=newtext, bg="#00B82B" if text == "Resume" else "#C5B90A", command= lambda: StartSim() if text == "Resume" else PauseSim())
+        self.pause.config(text=newtext, bg="#00B82B" if text == "Resume" else "#C5B90A", command= lambda: ResumeSim() if text == "Resume" else PauseSim())
         
 
 class GameInformation:
@@ -134,12 +139,14 @@ class GameInformation:
         self.horizontal = ttk.Separator(self.infoframe, orient="horizontal")
         self.horizontal.grid(row=1, column=0, columnspan=2, sticky="ew")
     
-    def starttimer(self, initialtime):
-        self.initialtime = initialtime
-        self.currenttime = time.time()
+    def starttimer(self, time):
+        self.currenttime = time
         self.time = int(self.currenttime - self.initialtime)
         
         self.formattedtime.set("{:02d}:{:02d}".format(self.time // 60, self.time % 60))
+    
+    def setinitialtime(self, initial_time):
+        self.initialtime = initial_time
     
     def setscore(self, ourscore, enemyscore):
         self.ourscore = ourscore
@@ -213,6 +220,8 @@ class RobotSettings:
         self.window = window
         self.frame = frame
         self.PIDValue = {}
+        self.PIDInputs = {}
+        self.showpaths = {}
         self.robotsettingsframe = tk.Frame(self.frame)
         self.robotsettingsframe.pack(side="top", fill="both", padx=10, pady=10)
         
@@ -255,13 +264,6 @@ class RobotSettings:
         self.robot1label.pack(side="top", padx=10)
         
         self.PIDframe = tk.Frame(self.robot1controlframe)
-        # all add buttons
-        self.addKp = tk.Button(self.PIDframe, text="+", width=2, height=1, bg="#00B82B", font=("bahnschrift", 12), fg="white", command=lambda: self.changeKp(robotID, True))
-        self.addKp.grid(row=0, column=1, padx=2, pady=2, sticky="w")
-        self.addKi = tk.Button(self.PIDframe, text="+", width=2, height=1, bg="#00B82B", font=("bahnschrift", 12), fg="white")
-        self.addKi.grid(row=0, column=2, padx=2, pady=2, sticky="w")
-        self.addKd = tk.Button(self.PIDframe, text="+", width=2, height=1, bg="#00B82B", font=("bahnschrift", 12), fg="white")
-        self.addKd.grid(row=0, column=3, padx=2, pady=2, sticky="w")
         
         # PID label
         self.PIDlabel = tk.Label(self.PIDframe, text="PID: ", font=("bahnschrift", 12))
@@ -269,38 +271,47 @@ class RobotSettings:
         
         # Kp label and values
         self.kpframe = tk.Frame(self.PIDframe)
-        self.kplabel = tk.Label(self.kpframe, text="Kp: ", font=("bahnschrift", 12))
+        self.kplabel = tk.Label(self.kpframe, text="P: ", font=("bahnschrift", 12))
         self.kplabel.grid(row=0, column=0, sticky="w")
         self.kp = tk.Label(self.kpframe, textvariable=self.Kpval, font=("bahnschrift", 16))
         self.kp.grid(row=0, column=1, pady=2, sticky="w")
         
-        self.kpframe.grid(row=1, column=1, padx=2, pady=2, sticky="w")
+        self.kpframe.grid(row=0, column=1, padx=2, pady=2, sticky="w")
         
         # Ki label and values
         self.kiframe = tk.Frame(self.PIDframe)
-        self.kilabel = tk.Label(self.kiframe, text="Ki: ", font=("bahnschrift", 12))
+        self.kilabel = tk.Label(self.kiframe, text="I: ", font=("bahnschrift", 12))
         self.kilabel.grid(row=0, column=0, sticky="w")
         self.ki = tk.Label(self.kiframe, textvariable=self.Kival, font=("bahnschrift", 16))
         self.ki.grid(row=0, column=1, pady=2, sticky="w")
         
-        self.kiframe.grid(row=1, column=2, padx=2, pady=2, sticky="w")
+        self.kiframe.grid(row=0, column=2, padx=2, pady=2, sticky="w")
         
         # Kd label and values
         self.kdframe = tk.Frame(self.PIDframe)
-        self.kdlabel = tk.Label(self.kdframe, text="Kd: ", font=("bahnschrift", 12))
+        self.kdlabel = tk.Label(self.kdframe, text="D: ", font=("bahnschrift", 12))
         self.kdlabel.grid(row=0, column=0, sticky="w")
         self.kd = tk.Label(self.kdframe, textvariable=self.Kdval, font=("bahnschrift", 16))
         self.kd.grid(row=0, column=1, pady=2, sticky="w")
         
-        self.kdframe.grid(row=1, column=3, padx=2, pady=2, sticky="w")
+        self.kdframe.grid(row=0, column=3, padx=2, pady=2, sticky="w")
+        
+        # set value inputs
+        self.PIDInputs["inputKp{}".format(self.robotID)] = tk.Entry(self.PIDframe, width=5, font=("bahnschrift", 12))
+        self.PIDInputs["inputKi{}".format(self.robotID)] = tk.Entry(self.PIDframe, width=5, font=("bahnschrift", 12))
+        self.PIDInputs["inputKd{}".format(self.robotID)] = tk.Entry(self.PIDframe, width=5, font=("bahnschrift", 12))
+        
+        self.PIDInputs["inputKp{}".format(self.robotID)].grid(row=1, column=1, padx=2, pady=2, sticky="w")
+        self.PIDInputs["inputKi{}".format(self.robotID)].grid(row=1, column=2, padx=2, pady=2, sticky="w")
+        self.PIDInputs["inputKd{}".format(self.robotID)].grid(row=1, column=3, padx=2, pady=2, sticky="w")
         
         # all subtract buttons
-        self.subtractKp = tk.Button(self.PIDframe, text="-", width=2, height=1, bg="#B80000", font=("bahnschrift", 12), fg="white")
-        self.subtractKp.grid(row=2, column=1, padx=2, pady=2, sticky="w")
-        self.subtractKi = tk.Button(self.PIDframe, text="-", width=2, height=1, bg="#B80000", font=("bahnschrift", 12), fg="white")
-        self.subtractKi.grid(row=2, column=2, padx=2, pady=2, sticky="w")
-        self.subtractKd = tk.Button(self.PIDframe, text="-", width=2, height=1, bg="#B80000", font=("bahnschrift", 12), fg="white")
-        self.subtractKd.grid(row=2, column=3, padx=2, pady=2, sticky="w")
+        self.setKpButton = tk.Button(self.PIDframe, text="SET", width=2, height=1, bg="#B80000", font=("bahnschrift", 12), fg="white", command = lambda: self.setKp(robotID, float(self.PIDInputs["inputKp{}".format(robotID)].get())))
+        self.setKpButton.grid(row=2, column=1, ipadx=10, pady=2, sticky="w")
+        self.setKiButton = tk.Button(self.PIDframe, text="SET", width=2, height=1, bg="#B80000", font=("bahnschrift", 12), fg="white", command = lambda: self.setKi(robotID, float(self.PIDInputs["inputKi{}".format(robotID)].get())))
+        self.setKiButton.grid(row=2, column=2, ipadx=10, pady=2, sticky="w")
+        self.setKdButton = tk.Button(self.PIDframe, text="SET", width=2, height=1, bg="#B80000", font=("bahnschrift", 12), fg="white", command= lambda: self.setKd(robotID, float(self.PIDInputs["inputKd{}".format(robotID)].get())))
+        self.setKdButton.grid(row=2, column=3, ipadx=10, pady=2, sticky="w")
         
         self.PIDframe.pack(side="top", fill="both", pady=10)
         
@@ -310,26 +321,43 @@ class RobotSettings:
         
         self.showoptionlabel.grid(row=0, column=0, padx=2, pady=2, sticky="w")
         
-        self.showpath = tk.BooleanVar()
-        self.showpathradio = tk.Radiobutton(self.optionframe, text="Show", variable=self.showpath, value=True, font=("bahnschrift", 12))
+        self.showpaths["showpath{}".format(self.robotID)] = tk.BooleanVar()
+        self.showpathradio = tk.Radiobutton(self.optionframe, text="Show", variable=self.showpaths["showpath{}".format(robotID)], value=True, font=("bahnschrift", 12))
         self.showpathradio.grid(row=0, column=1, padx=2, pady=2, sticky="w")
         
-        self.hidepathradio = tk.Radiobutton(self.optionframe, text="Hide", variable=self.showpath, value=False, font=("bahnschrift", 12))
+        self.hidepathradio = tk.Radiobutton(self.optionframe, text="Hide", variable=self.showpaths["showpath{}".format(robotID)], value=False, font=("bahnschrift", 12))
         self.hidepathradio.select()
         self.hidepathradio.grid(row=0, column=2, padx=2, pady=2, sticky="w")
         
         self.optionframe.pack(side="top", fill="both", padx=10, pady=5)
         self.robot1controlframe.pack(side="left", fill="both", padx=35, pady=10)
     
-    def changeKp(self, robotID, Increase):
-        if Increase:
-            kp = float(self.PIDValue["Kp{}".format(robotID)].get())
-            kp += 0.1
-            self.PIDValue["Kp{}".format(robotID)].set(round(kp, 1))
-        else:
-            kp = float(self.PIDValue["Kp{}".format(robotID)].get())
-            kp -= 0.1
-            self.PIDValue["Kp{}".format(robotID)].set(round(kp, 1))
+    def setKp(self, robotID, kp):
+        try:
+            checknegative(kp)
+        except ValueError:
+            messagebox.showerror("Error", "Value must be a positive number")
+            return
+        
+        self.PIDValue["Kp{}".format(robotID)].set(kp)
+    
+    def setKi(self, robotID, ki):
+        try:
+            checknegative(ki)
+        except ValueError:
+            messagebox.showerror("Error", "Value must be a positive number")
+            return
+        
+        self.PIDValue["Ki{}".format(robotID)].set(ki)
+        
+    def setKd(self, robotID, kd):
+        try:
+            checknegative(kd)
+        except ValueError:
+            messagebox.showerror("Error", "Value must be a positive number")
+            return
+        
+        self.PIDValue["Kd{}".format(robotID)].set(kd)
         
 
 class SimulationSetup:
@@ -360,6 +388,9 @@ class SimulationSetup:
         
         self.horizontal = ttk.Separator(self.simsetupframe, orient="horizontal")
         self.horizontal.pack(side="top", fill="both", padx=10, pady=5)
+        
+    def showFov(self):
+        return self.showfov.get()
                 
 class Football:
     def __init__(self, field, x, y):
@@ -400,11 +431,12 @@ class Robot:
         self.canvas.delete(self.body)
         self.createbody(self.width, self.height, self.color)
         
-        
     def createbody(self, width, height, color):
        self.body = self.canvas.create_polygon(self.x, self.y - height / 2, self.x + width / 2, self.y - height / 4, self.x + width / 2, self.y + height / 4, self.x, self.y + height / 2, self.x - width / 2, self.y + height / 4, self.x - width / 2, self.y - height / 4, fill=color, outline="")
        
-       
+    def getbodyid(self):
+        return self.body
+    
     def getPos(self):
         return self.x, self.y
     
@@ -423,26 +455,31 @@ def StartSim():
     global startsim
     global pausesim
     
-    initialtime = time.time()
-    ourscore = 0
-    enemyscore = 0
+    INITIALTIME = np.copy(time.time())
+    gameinfo.setinitialtime(INITIALTIME)
+    pausetime = lastpausetime = ourscore = enemyscore = 0
     startsim = True
     pausesim = False
     while startsim:
-        if pausesim:
-            controller.changePausebutton("Resume")
-        else:
-            controller.changePausebutton("Pause")
-        window.update()
 
         while not pausesim:
+            controller.changePausebutton("Pause")
             robot1.move(0, 50)
+            print(field.getcanvas().find_overlapping(robot1.getPos()[0], robot1.getPos()[1], robot1.getPos()[0], robot1.getPos()[1]))
             window.update()
-            gameinfo.starttimer(initialtime)
+            gameinfo.starttimer(time.time() - (pausetime + lastpausetime))
             gameinfo.setscore(ourscore, enemyscore)
-            lasttime = time.time()
+            
+        lasttime = time.time()    
+        lastpausetime = pausetime
         
-        initialtime += time.time() - lasttime
+        while pausesim:
+            controller.changePausebutton("Resume")
+            pausetime = time.time() - lasttime
+            window.update()
+        
+        
+
 def StopSim():
     global startsim
     global pausesim
