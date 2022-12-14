@@ -462,7 +462,7 @@ class Football:
         self.velocity = math.sqrt(self.velocityx**2 + self.velocityy**2)
 
 class Robot:
-    def __init__(self, field, x, y, speed, color):
+    def __init__(self, field, x, y, speed, color, robotID):
         self.Canvaswidth = field.getsize()[0]
         self.Canvasheight = field.getsize()[1]
         self.color = color
@@ -470,6 +470,9 @@ class Robot:
         self.y = y
         self.canvas = field.getcanvas()
         self.speed = speed
+        self.velocity = 0
+        self.deadend = False
+        self.robotID = robotID
         
         # create a hexagon that has center at x y
         self.width = 80
@@ -492,8 +495,8 @@ class Robot:
         velocityx = math.sin(math.radians(heading)) * (speed * 0.0005)
         velocityy = math.cos(math.radians(heading)) * (speed * 0.0005)
         
-        velocity = math.sqrt(velocityx**2 + velocityy**2)
-        return (heading, velocity * (ROBOT_WEIGHT / 9.81))
+        self.velocity = math.sqrt(velocityx**2 + velocityy**2) * (ROBOT_WEIGHT / 9.81)
+        return (heading, self.velocity)
         
     def setvelocity(self, velocity):
         self.velocity = velocity
@@ -501,9 +504,15 @@ class Robot:
     def getPos(self):
         return self.x, self.y
     
-    def move(self, heading, speed):
+    def move(self, heading, speed, collision = False):
         if (self.x < 0 + self.width/2 or self.x > self.Canvaswidth - self.width/2) or (self.y < 0 + self.height/2 or self.y > self.Canvasheight - self.height/2):
             self.changePos(self.x, self.y)
+            self.velocity = 0
+            self.speed = 0
+            self.deadend = True
+            return
+        
+        if collision:
             return
         
         xmove = math.sin(math.radians(heading)) * (speed * 0.001)
@@ -517,22 +526,69 @@ def StartSim():
     global pausesim
     
     INITIALTIME = np.copy(time.time())
+    
     ROBOT1_SPEED = 100
-    ROBOT1_HEADING = 0
+    ROBOT1_HEADING = -45
+    
+    ROBOT2_SPEED = 100
+    ROBOT2_HEADING = 135
+    
     gameinfo.setinitialtime(INITIALTIME)
     pausetime = lastpausetime = ourscore = enemyscore = ball_heading = ball_speed = 0
     startsim = True
     pausesim = False
     ballhit = False
+    robotcolision = False
+    old_robot1_heading = 1
     while startsim:
 
         while not pausesim:
             controller.changePausebutton("Pause")
+            
+            momentum_robot1 = robot1.momentum(ROBOT1_HEADING, ROBOT1_SPEED)
+            momentum_robot2 = robot2.momentum(ROBOT2_HEADING, ROBOT2_SPEED)
+            
+            # check robot collision
+            for i in field.getcanvas().find_overlapping(robot1.getPos()[0] - (robot1.width / 2) + 10, robot1.getPos()[1] - (robot1.height / 2) + 10, robot1.getPos()[0] + (robot1.width / 2) - 10, robot1.getPos()[1] + (robot1.height / 2) - 10):
+                if i == robot2.getbodyid() and not robotcolision and old_robot1_heading != ROBOT1_HEADING:
+                    print(f"Robot velocity 1: {robot1.velocity, robot1.speed} Robot velocity 2: {robot2.velocity, robot2.speed}")
+                    
+                    # calculate new heading and speed using heading and speed of robot 1 and 2
+                    ROBOT1_HEADING = math.degrees(math.atan((math.sin(math.radians(ROBOT1_HEADING)) * ROBOT1_SPEED + math.sin(math.radians(ROBOT2_HEADING)) * ROBOT2_SPEED) / (math.cos(math.radians(ROBOT1_HEADING)) * ROBOT1_SPEED + math.cos(math.radians(ROBOT2_HEADING)) * ROBOT2_SPEED)))
+                    
+                    ROBOT1_SPEED = math.sqrt((math.cos(math.radians(ROBOT1_HEADING)) * ROBOT1_SPEED + math.cos(math.radians(ROBOT2_HEADING)) * ROBOT2_SPEED)**2 + (math.sin(math.radians(ROBOT1_HEADING)) * ROBOT1_SPEED + math.sin(math.radians(ROBOT2_HEADING)) * ROBOT2_SPEED)**2)
+                    
+                    # set robot 2 speed and heading to the same as robot 1
+                    ROBOT2_SPEED = ROBOT1_SPEED
+                    ROBOT2_HEADING = ROBOT1_HEADING
+                    
+                    
+                    old_robot1_heading = ROBOT1_HEADING
+                    robotcolision = True
+                    
+                    if robot1.deadend or robot2.deadend:
+                        ROBOT1_SPEED = ROBOT2_SPEED = 0
+                    
+                    break
+            
+            print(f"Robot 1: {ROBOT1_SPEED} {ROBOT1_HEADING} || Robot 2: {ROBOT2_SPEED} {ROBOT2_HEADING}")
+        
+            # make robot 1 move
             robot1.move(ROBOT1_HEADING, ROBOT1_SPEED)
-            for i in field.getcanvas().find_overlapping(robot1.getPos()[0] - robot1.width / 2, robot1.getPos()[1] - robot1.height / 2, robot1.getPos()[0] + robot1.width / 2, robot1.getPos()[1] + robot1.height / 2):
+            for i in field.getcanvas().find_overlapping(robot1.getPos()[0] - (robot1.width / 2) + 20, robot1.getPos()[1] - (robot1.height / 2) + 20, robot1.getPos()[0] + (robot1.width / 2) - 20, robot1.getPos()[1] + (robot1.height / 2) - 20):
                 
                 if i == football.getbody():
-                    ball_heading, ball_speed = robot1.momentum(ROBOT1_HEADING, ROBOT1_SPEED)
+                    ball_heading, ball_speed = momentum_robot1
+                    ballhit = True
+                    football.momentum((ball_heading, ball_speed))
+                    break
+            
+            # make robot 2 move
+            robot2.move(ROBOT2_HEADING, ROBOT2_SPEED)
+            for i in field.getcanvas().find_overlapping(robot2.getPos()[0] - (robot2.width / 2) + 20, robot2.getPos()[1] - (robot2.height / 2) + 20, robot2.getPos()[0] + (robot2.width / 2) - 20, robot2.getPos()[1] + (robot2.height / 2) - 20):
+                
+                if i == football.getbody():
+                    ball_heading, ball_speed = momentum_robot2
                     ballhit = True
                     football.momentum((ball_heading, ball_speed))
                     break
@@ -588,8 +644,8 @@ fieldinfo = FieldInfo(window, infoframe)
 settings = RobotSettings(window, infoframe)
 simsetup = SimulationSetup(window, infoframe)
 controller = Controller(window, infoframe)
-robot1 = Robot(field, 0, 75, 0, "#FF4E4E")
-robot2 = Robot(field, 0, 300, 0, "#FF4E4E")
+robot1 = Robot(field, 100, 200, 0, "#ff5cd3", 1)
+robot2 = Robot(field, -100, 400, 0, "#0ff279", 2)
 football = Football(field, 0, field.getsize()[1]/2)
     
 window.mainloop()
