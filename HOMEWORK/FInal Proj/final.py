@@ -10,6 +10,9 @@ window.title("Robot omni-wheels Soccer Simulation")
 window.geometry("1200x800")
 window.resizable(False, False)
 
+ROBOT_WEIGHT = 1100
+BALL_WEIGHT = 46
+
 class IncrementPositiveError(Exception):
     pass
 
@@ -18,6 +21,13 @@ class IncrementValueError(Exception):
 
 class IncrementStepError(Exception):
     pass
+
+class ArgumentLengthError(Exception):
+    pass
+
+def checklength(arguments, length):
+    if len(arguments) != length:
+        raise ArgumentLengthError("Arguments must be of length {}".format(length))
 
 def checkIncrement(increment):
     try:
@@ -214,6 +224,9 @@ class FieldInfo:
         else:
             self.frictionval.set(round(float(self.frictionval.get()) - float(increment), 3))
     
+    def getfriction(self):
+        return float(self.frictionval.get())
+    
     
 class RobotSettings:
     def __init__(self, window, frame):
@@ -405,9 +418,48 @@ class Football:
     def createball(self):
         self.ball = self.canvas.create_oval(self.x - self.r, self.y - self.r, self.x + self.r, self.y + self.r, fill="#424242", outline="white", width=2)
     
+    def getbody(self):
+        return self.ball
+    
+    def changePos(self, x, y):
+        self.x = x
+        self.y = y
+        self.canvas.delete(self.ball)
+        self.createball()
+    
     def getPos(self):
         return (self.x, self.y)
-               
+    
+    def move(self):
+        if (self.x < 0 + self.r or self.x > self.Canvaswidth - self.r) or (self.y < 0 + self.r or self.y > self.Canvasheight - self.r):
+            self.changePos(self.x, self.y)
+            return
+
+        xmove = math.sin(math.radians(self.heading)) * (self.velocity * (BALL_WEIGHT / ROBOT_WEIGHT))
+        ymove = math.cos(math.radians(self.heading)) * (self.velocity * (BALL_WEIGHT / ROBOT_WEIGHT))
+        self.x += xmove
+        self.y += ymove
+        self.canvas.delete(self.ball)
+        self.createball()
+        
+    def setspeed(self, speed):
+        self.velocity = speed
+    
+    def getspeed(self):
+        return self.speed
+
+    def momentum(self, args):
+        try:
+            checklength(args, 2)
+        except ArgumentLengthError:
+            print("!!Invalid number of arguments!!")
+            return
+        
+        self.heading, self.speed = args
+        self.velocityy = math.cos(math.radians(self.heading)) * (self.speed)
+        self.velocityx = math.sin(math.radians(self.heading)) * (self.speed)
+        
+        self.velocity = math.sqrt(self.velocityx**2 + self.velocityy**2)
 
 class Robot:
     def __init__(self, field, x, y, speed, color):
@@ -418,7 +470,6 @@ class Robot:
         self.y = y
         self.canvas = field.getcanvas()
         self.speed = speed
-        print(self.x, self.y)
         
         # create a hexagon that has center at x y
         self.width = 80
@@ -437,6 +488,16 @@ class Robot:
     def getbodyid(self):
         return self.body
     
+    def momentum(self, heading, speed):
+        velocityx = math.sin(math.radians(heading)) * (speed * 0.0005)
+        velocityy = math.cos(math.radians(heading)) * (speed * 0.0005)
+        
+        velocity = math.sqrt(velocityx**2 + velocityy**2)
+        return (heading, velocity * (ROBOT_WEIGHT / 9.81))
+        
+    def setvelocity(self, velocity):
+        self.velocity = velocity
+    
     def getPos(self):
         return self.x, self.y
     
@@ -445,8 +506,8 @@ class Robot:
             self.changePos(self.x, self.y)
             return
         
-        xmove = math.sin(math.radians(heading)) * (speed * 0.0005)
-        ymove = math.cos(math.radians(heading)) * (speed * 0.0005)
+        xmove = math.sin(math.radians(heading)) * (speed * 0.001)
+        ymove = math.cos(math.radians(heading)) * (speed * 0.001)
         self.x += xmove
         self.y += ymove
         self.changePos(self.x, self.y)
@@ -456,16 +517,34 @@ def StartSim():
     global pausesim
     
     INITIALTIME = np.copy(time.time())
+    ROBOT1_SPEED = 100
+    ROBOT1_HEADING = 0
     gameinfo.setinitialtime(INITIALTIME)
-    pausetime = lastpausetime = ourscore = enemyscore = 0
+    pausetime = lastpausetime = ourscore = enemyscore = ball_heading = ball_speed = 0
     startsim = True
     pausesim = False
+    ballhit = False
     while startsim:
 
         while not pausesim:
             controller.changePausebutton("Pause")
-            robot1.move(0, 50)
-            print(field.getcanvas().find_overlapping(robot1.getPos()[0], robot1.getPos()[1], robot1.getPos()[0], robot1.getPos()[1]))
+            robot1.move(ROBOT1_HEADING, ROBOT1_SPEED)
+            for i in field.getcanvas().find_overlapping(robot1.getPos()[0] - robot1.width / 2, robot1.getPos()[1] - robot1.height / 2, robot1.getPos()[0] + robot1.width / 2, robot1.getPos()[1] + robot1.height / 2):
+                
+                if i == football.getbody():
+                    ball_heading, ball_speed = robot1.momentum(ROBOT1_HEADING, ROBOT1_SPEED)
+                    ballhit = True
+                    football.momentum((ball_heading, ball_speed))
+                    break
+                  
+            if ballhit:
+                football.move()
+                ball_speed -= fieldinfo.getfriction()
+                football.setspeed(ball_speed)
+                if ball_speed <= 0:
+                    football.setspeed(0)
+                    ballhit = False
+            
             window.update()
             gameinfo.starttimer(time.time() - (pausetime + lastpausetime))
             gameinfo.setscore(ourscore, enemyscore)
