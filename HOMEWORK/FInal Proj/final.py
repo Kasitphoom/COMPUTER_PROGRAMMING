@@ -172,7 +172,7 @@ class FieldInfo:
         self.window = window
         self.frame = frame
         self.frictionval = tk.StringVar()
-        self.frictionval.set(0.0)
+        self.frictionval.set(0.1)
         self.fieldinfoframe = tk.Frame(self.frame)
         self.fieldinfoframe.pack(side="top", fill="both", padx=10)
         
@@ -371,6 +371,9 @@ class RobotSettings:
             return
         
         self.PIDValue["Kd{}".format(robotID)].set(kd)
+    
+    def getpidvalues(self):
+        return self.PIDValue
         
 
 class SimulationSetup:
@@ -515,8 +518,8 @@ class Robot:
         if collision:
             return
         
-        xmove = math.sin(math.radians(heading)) * (speed * 0.001)
-        ymove = math.cos(math.radians(heading)) * (speed * 0.001)
+        xmove = math.sin(math.radians(heading)) * (speed * 0.0015)
+        ymove = math.cos(math.radians(heading)) * (speed * 0.0015)
         self.x += xmove
         self.y += ymove
         self.changePos(self.x, self.y)
@@ -527,11 +530,14 @@ def StartSim():
     
     INITIALTIME = np.copy(time.time())
     
-    ROBOT1_SPEED = 100
-    ROBOT1_HEADING = -45
+    ROBOT1_INITIAL_SPEED = 100
+    ROBOT2_INITIAL_SPEED = 100
     
-    ROBOT2_SPEED = 100
-    ROBOT2_HEADING = 135
+    ROBOT1_SPEED = 0
+    ROBOT1_HEADING = 0
+    
+    ROBOT2_SPEED = 0
+    ROBOT2_HEADING = 0
     
     gameinfo.setinitialtime(INITIALTIME)
     pausetime = lastpausetime = ourscore = enemyscore = ball_heading = ball_speed = 0
@@ -539,11 +545,53 @@ def StartSim():
     pausesim = False
     ballhit = False
     robotcolision = False
+    lasterror1 = lasterror2 = 0
     old_robot1_heading = 1
     while startsim:
 
         while not pausesim:
             controller.changePausebutton("Pause")
+            
+            # finding for ball
+            currentballpos = football.getPos()
+            currentrobot1pos = robot1.getPos()
+            currentrobot2pos = robot2.getPos()
+            
+            kpr1 = float(settings.getpidvalues()["Kp1"].get())
+            kir1 = float(settings.getpidvalues()["Ki1"].get())
+            kdr1 = float(settings.getpidvalues()["Kd1"].get())
+            
+            kpr2 = float(settings.getpidvalues()["Kp2"].get())
+            kir2 = float(settings.getpidvalues()["Ki2"].get())
+            kdr2 = float(settings.getpidvalues()["Kd2"].get())
+            
+            xr1_diff = currentballpos[0] - currentrobot1pos[0]
+            yr1_diff = currentballpos[1] - currentrobot1pos[1]
+
+            xr2_diff = currentballpos[0] - currentrobot2pos[0]
+            yr2_diff = currentballpos[1] - currentrobot2pos[1]
+            
+            # distance from ball to robot
+            disr1 = math.sqrt(xr1_diff**2 + yr1_diff**2)
+            disr2 = math.sqrt(xr2_diff**2 + yr2_diff**2)
+            
+            if disr1 < 55:
+                ROBOT1_HEADING = math.degrees(math.atan2(xr1_diff, yr1_diff))
+                ROBOT1_SPEED = ROBOT1_INITIAL_SPEED
+            else:
+                ROBOT1_HEADING = math.degrees(math.atan2(xr1_diff, yr1_diff - 50))
+                res1, error1 = Pid(disr1, kpr1, kir1, kdr1, lasterror1)
+                ROBOT1_SPEED = limit(ROBOT1_INITIAL_SPEED * ((disr1 + res1) * 0.01) + 0.85, -100, 100)
+                lasterror1 = error1
+                
+            if disr2 < 55:
+                ROBOT2_HEADING = math.degrees(math.atan2(xr2_diff, yr2_diff))
+                ROBOT2_SPEED = ROBOT2_INITIAL_SPEED
+            else:
+                ROBOT2_HEADING = math.degrees(math.atan2(xr2_diff, yr2_diff + 50))
+                res2, error2 = Pid(disr2, kpr2, kir2, kdr2, lasterror2)
+                ROBOT2_SPEED = limit(ROBOT2_INITIAL_SPEED * ((disr2 + res1) * 0.01) + 0.85, -100, 100)
+                lasterror2 = error2
             
             momentum_robot1 = robot1.momentum(ROBOT1_HEADING, ROBOT1_SPEED)
             momentum_robot2 = robot2.momentum(ROBOT2_HEADING, ROBOT2_SPEED)
@@ -570,8 +618,6 @@ def StartSim():
                         ROBOT1_SPEED = ROBOT2_SPEED = 0
                     
                     break
-            
-            print(f"Robot 1: {ROBOT1_SPEED} {ROBOT1_HEADING} || Robot 2: {ROBOT2_SPEED} {ROBOT2_HEADING}")
         
             # make robot 1 move
             robot1.move(ROBOT1_HEADING, ROBOT1_SPEED)
@@ -613,7 +659,24 @@ def StartSim():
             pausetime = time.time() - lasttime
             window.update()
         
-        
+def Pid(error, kp, ki, kd, lasterror, integral=0):
+    
+    PD = kp * error + kd * (error - lasterror)
+    if error == 0:
+        integral = 0
+    else:
+        integral = error + integral
+    I = ki * integral
+    res = PD + I
+    return res, error
+
+def limit(value, min, max):
+    if value < min:
+        return min
+    elif value > max:
+        return max
+    else:
+        return value
 
 def StopSim():
     global startsim
@@ -645,7 +708,7 @@ settings = RobotSettings(window, infoframe)
 simsetup = SimulationSetup(window, infoframe)
 controller = Controller(window, infoframe)
 robot1 = Robot(field, 100, 200, 0, "#ff5cd3", 1)
-robot2 = Robot(field, -100, 400, 0, "#0ff279", 2)
+robot2 = Robot(field, 100, 600, 0, "#0ff279", 2)
 football = Football(field, 0, field.getsize()[1]/2)
     
 window.mainloop()
