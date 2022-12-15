@@ -1,6 +1,7 @@
 import tkinter as tk
-from tkinter import ttk
-from tkinter import messagebox
+from tkinter import ttk, messagebox, filedialog
+import os
+import pickle
 import numpy as np
 import math
 import time
@@ -10,6 +11,21 @@ window = tk.Tk()
 window.title("Robot omni-wheels Soccer Simulation")
 window.geometry("1200x800")
 window.resizable(False, False)
+
+menu = tk.Menu(window)
+filemenu = tk.Menu(menu, tearoff=0)
+filemenu.add_command(label="Save Preferences", command= lambda: SavePreferences())
+filemenu.add_command(label="Load Preferences", command= lambda: LoadPreferences())
+filemenu.add_separator()
+filemenu.add_command(label="Exit (No log saved)", command=window.quit)
+menu.add_cascade(label="File", menu=filemenu)
+
+logmenu = tk.Menu(menu, tearoff=0)
+logmenu.add_command(label="Show log folder", command= lambda: ShowLogFolder())
+menu.add_cascade(label="Log", menu=logmenu)
+
+window.config(menu=menu)
+
 
 ROBOT_WEIGHT = 1100
 BALL_WEIGHT = 46
@@ -171,6 +187,12 @@ class GameInformation(InfoScreen):
         self.formattedtime.set("00:00")
         self.formattedscore.set("0 - 0")
         
+    def getscores(self):
+        return "{} - {}".format(self.ourscore, self.enemyscore)
+    
+    def gettimeelapsed(self):
+        return self.formattedtime.get()
+        
 class FieldInfo(InfoScreen):
     def __init__(self, window, frame):
         super().__init__(window)
@@ -230,6 +252,9 @@ class FieldInfo(InfoScreen):
     
     def getfriction(self):
         return float(self.frictionval.get())
+    
+    def setfriction(self, friction):
+        self.frictionval.set(friction)
     
     
 class RobotSettings(InfoScreen):
@@ -377,6 +402,10 @@ class RobotSettings(InfoScreen):
     
     def getpidvalues(self):
         return self.PIDValue
+    
+    def loadpidvalues(self, pidvalues):
+        for k, v in pidvalues.items():
+            self.PIDValue[k].set(float(v))
         
 
 class SimulationSetup(InfoScreen):
@@ -410,6 +439,9 @@ class SimulationSetup(InfoScreen):
         
     def showFov(self):
         return self.showfov.get()
+    
+    def loadFov(self, fov):
+        self.showfov.set(fov)
                 
 class Football:
     def __init__(self, field, x, y):
@@ -573,9 +605,6 @@ def StartSim():
     robotcolision = False
     ballreset = False
     
-    robot1 = Robot(field, random.randrange(int(-field.getsize()[0]/2) + 80, int(field.getsize()[0]/2) - 80), random.randrange(0, field.getsize()[1] - 80), 0, "#ff5cd3", 1)
-    robot2 = Robot(field, random.randrange(int(-field.getsize()[0]/2) + 80, int(field.getsize()[0]/2) - 80), random.randrange(0, field.getsize()[1] - 80), 0, "#0ff279", 2)
-    
     while startsim:
 
         while not pausesim:
@@ -649,12 +678,12 @@ def StartSim():
                     
                     break
             
-            if (football.getPos()[1] - 50 < robot1.getPos()[1]) and (math.degrees(math.atan2(xr1_diff, yr1_diff)) > 25 or math.degrees(math.atan2(xr1_diff, yr1_diff)) < -25):
+            if (football.getPos()[1] - 50 < robot1.getPos()[1]) and (math.degrees(math.atan2(xr1_diff, yr1_diff)) > 25 or math.degrees(math.atan2(xr1_diff, yr1_diff)) < -25) and disr1 > 50:
                 
                 ROBOT1_HEADING = 180
                 ROBOT1_SPEED = 125
             
-            if (football.getPos()[1] + 50 > robot2.getPos()[1] and (math.degrees(math.atan2(xr2_diff, yr2_diff)) > 155 or math.degrees(math.atan2(xr2_diff, yr2_diff)) > -155)):
+            if (football.getPos()[1] + 50 > robot2.getPos()[1] and (math.degrees(math.atan2(xr2_diff, yr2_diff)) > 155 or math.degrees(math.atan2(xr2_diff, yr2_diff)) > -155) and disr2 > 50):
 
                 ROBOT2_HEADING = 0
                 ROBOT2_SPEED = 125
@@ -692,7 +721,7 @@ def StartSim():
             
             ballcurrentpos = football.getPos()
 
-            if balllastpos == ballcurrentpos:
+            if balllastpos == ballcurrentpos and not football.getPos() == (field.getsize()[0]/2, field.getsize()[1]/2):
                 ballstoptime = int(time.time() - ballLastMovetime)
             else:
                 ballreset = False
@@ -716,12 +745,14 @@ def StartSim():
                     football.resetpos()
                     robot1.resetpos()
                     robot2.resetpos()
+                    ourgoal_log.append("Goal at " + str(gameinfo.gettimeelapsed()))
                 
                 if i == OURGOAL and football.getPos()[1] >= field.getsize()[1] - football.r:
                     enemyscore += 1
                     football.resetpos()
                     robot1.resetpos()
                     robot2.resetpos()
+                    enemygoal_log.append("Goal at " + str(gameinfo.gettimeelapsed()))
                     
                 
             
@@ -736,6 +767,8 @@ def StartSim():
             controller.changePausebutton("Resume")
             pausetime = time.time() - lasttime
             window.update()
+    
+    window.update()
         
 def Pid(error, kp, ki, kd, lasterror, integral=0):
     
@@ -759,11 +792,49 @@ def limit(value, min, max):
 def StopSim():
     global startsim
     global pausesim
+    global settings
+    global fieldinfo
+    global gameinfo
+    global ourgoal_log
+    global enemygoal_log
     
     pausesim = True
     startsim = False
     controller.changePausebutton("Pause")
     gameinfo.reset()
+    
+    ourgoal = "\n".join(ourgoal_log)
+    enemygoal = "\n".join(enemygoal_log)
+    
+    content = [
+        "Game simulated at {}\n".format(time.strftime("%d-%m-%Y %H:%M:%S")),
+        "Robot Settings:",
+        "|{:-<11}|{:-^11}|{:-^11}|".format("", "Robot 1", "Robot 2"),
+        "|{:<11}|{:<11}|{:<11}|".format("Kp", settings.getpidvalues()["Kp1"].get(), settings.getpidvalues()["Kp2"].get()),
+        "|{:<11}|{:<11}|{:<11}|".format("Ki", settings.getpidvalues()["Ki1"].get(), settings.getpidvalues()["Ki2"].get()),
+        "|{:<11}|{:<11}|{:<11}|".format("Kd", settings.getpidvalues()["Kd1"].get(), settings.getpidvalues()["Kd2"].get()),
+        "|-----------------------------------|\n",
+        "===============================================================",
+        "Player's Goal:",
+        ourgoal,
+        "\nEnemy's Goal:",
+        enemygoal,      
+               ]
+    
+    dirname = "logs"
+
+    if not os.path.exists(dirname):
+        os.mkdir(dirname)
+    
+    formattedtime = time.strftime("%Y%m%d_%H%M%S")
+    
+    filepath = "logs/log_" + formattedtime + "_" + gameinfo.getscores() + ".txt"
+    file = open(filepath, "w")
+    
+    for i in content:
+        file.write(i + "\n")
+    
+    file.close()
 
 def PauseSim():
     global pausesim
@@ -772,7 +843,53 @@ def PauseSim():
 def ResumeSim():
     global pausesim
     pausesim = False
+    
+def SavePreferences():
+    global settings
+    global fieldinfo
+    global simsetup
+    
+    newpidval = {}
+    
+    for k,v in settings.getpidvalues().items():
+        newpidval[k] = v.get()
+    
+    preferences = {
+        "FRICTION": fieldinfo.getfriction(),
+        "PIDVALUE": newpidval,
+        "ROBOTFOV": simsetup.showFov(),
+    }
+    
+    print(preferences)
+    
+    filepath = filedialog.asksaveasfilename(title = "Save Preferences", filetypes = [("all files","*.*")])
+    print(filepath)
+    if filepath == '':
+        return
+    else:
+        file = open(filepath, "wb")
+        pickle.dump(preferences, file)
+        file.close()
+    
+    messagebox.showinfo("Preferences Saved", "Preferences saved to " + filepath)
 
+def LoadPreferences():
+    
+    filepath = filedialog.askopenfile(title = "Load Preferences", filetypes = [("all files","*.*")])
+    if filepath is None:
+        return
+    else:
+        file = open(filepath.name, "rb")
+        load = pickle.load(file)
+        
+        accept = messagebox.askokcancel("Load Preferences", "Do you want to load these content?\n\nField Friction: {}\n----Robot1----\nKp: {}\nKi: {}\nKd: {}\n----Robot2----\nKp: {}\nKi: {}\nKd: {}\nShow Robot FOV: {}".format(load["FRICTION"], load["PIDVALUE"]["Kp1"], load["PIDVALUE"]["Ki1"], load["PIDVALUE"]["Kd1"], load["PIDVALUE"]["Kp2"], load["PIDVALUE"]["Ki2"], load["PIDVALUE"]["Kd2"], load["ROBOTFOV"]))
+        
+        if accept:
+            fieldinfo.setfriction(load["FRICTION"])
+            settings.loadpidvalues(load["PIDVALUE"])
+            simsetup.loadFov(load["ROBOTFOV"])
+            
+    
 startsim = False
 pausesim = False
     
@@ -785,6 +902,11 @@ fieldinfo = FieldInfo(window, infoframe)
 settings = RobotSettings(window, infoframe)
 simsetup = SimulationSetup(window, infoframe)
 controller = Controller(window, infoframe)
+robot1 = Robot(field, random.randrange(int(-field.getsize()[0]/2) + 80, int(field.getsize()[0]/2) - 80), random.randrange(0, field.getsize()[1] - 80), 0, "#ff5cd3", 1)
+robot2 = Robot(field, random.randrange(int(-field.getsize()[0]/2) + 80, int(field.getsize()[0]/2) - 80), random.randrange(0, field.getsize()[1] - 80), 0, "#0ff279", 2)
 football = Football(field, 0, field.getsize()[1]/2)
+
+ourgoal_log = []
+enemygoal_log = []
     
 window.mainloop()
