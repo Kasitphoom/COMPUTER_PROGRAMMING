@@ -745,14 +745,14 @@ def StartSim():
                     football.resetpos()
                     robot1.resetpos()
                     robot2.resetpos()
-                    ourgoal_log.append("Goal at " + str(gameinfo.gettimeelapsed()))
+                    ourgoal_log.append("Goal at " + str(gameinfo.gettimeelapsed()) + " (" + gameinfo.getscores() + ")")
                 
                 if i == OURGOAL and football.getPos()[1] >= field.getsize()[1] - football.r:
                     enemyscore += 1
                     football.resetpos()
                     robot1.resetpos()
                     robot2.resetpos()
-                    enemygoal_log.append("Goal at " + str(gameinfo.gettimeelapsed()))
+                    enemygoal_log.append("Goal at " + str(gameinfo.gettimeelapsed()) + " (" + gameinfo.getscores() + ")")
                     
                 
             
@@ -808,6 +808,13 @@ def StopSim():
     
     content = [
         "Game simulated at {}\n".format(time.strftime("%d-%m-%Y %H:%M:%S")),
+        "Time elapsed: {}\n".format(gameinfo.gettimeelapsed()),
+        "Score: {}\n".format(gameinfo.getscores()),
+        "===============================================================\n",
+        "Field Settings:",
+        "|{:-<11}|{:-^11}|".format("", "Value"),
+        "|{:<11}|{:<11}|".format("Friction", fieldinfo.getfriction()),
+        "|------------------------|\n"
         "Robot Settings:",
         "|{:-<11}|{:-^11}|{:-^11}|".format("", "Robot 1", "Robot 2"),
         "|{:<11}|{:<11}|{:<11}|".format("Kp", settings.getpidvalues()["Kp1"].get(), settings.getpidvalues()["Kp2"].get()),
@@ -889,7 +896,12 @@ def LoadPreferences():
             settings.loadpidvalues(load["PIDVALUE"])
             simsetup.loadFov(load["ROBOTFOV"])
             
-    
+def ShowLogFolder():
+    if os.path.exists("logs"):
+        os.startfile("logs")
+    else:
+        messagebox.showerror("Error", "No log folder found!")
+  
 startsim = False
 pausesim = False
     
