@@ -29,6 +29,7 @@ window.config(menu=menu)
 
 ROBOT_WEIGHT = 1100
 BALL_WEIGHT = 46
+ROBOT_WIDTH = 100
 
 class IncrementPositiveError(Exception):
     pass
@@ -300,7 +301,11 @@ class RobotSettings(InfoScreen):
         self.Kival.set(0.0)
         
         self.robot1controlframe = tk.Frame(self.controlframe)
-        label = "Robot " + str(self.robotID)
+        if robotID == 1:
+            label = "Enemy's Robot"
+        else:
+            label = "Player's Robot"
+            
         self.robot1label = tk.Label(self.robot1controlframe, text=label, font=("bahnschrift", 16))
         self.robot1label.pack(side="top", padx=10)
         
@@ -406,7 +411,9 @@ class RobotSettings(InfoScreen):
     def loadpidvalues(self, pidvalues):
         for k, v in pidvalues.items():
             self.PIDValue[k].set(float(v))
-        
+    
+    def getshowpaths(self):
+        return self.showpaths
 
 class SimulationSetup(InfoScreen):
     def __init__(self, window, frame):
@@ -451,6 +458,9 @@ class Football:
         self.x = x + self.Canvaswidth/2
         self.y = y
         self.r = 13
+        
+        self.velocity = 0
+        
         self.createball()
     
     def createball(self):
@@ -469,9 +479,9 @@ class Football:
         return (self.x, self.y)
     
     def move(self):
-        if (self.x < 0 + self.r or self.x > self.Canvaswidth - self.r) or (self.y < 0 + self.r or self.y > self.Canvasheight - self.r):
+        if (self.x < 0 + self.r or self.x > self.Canvaswidth - self.r) or (self.y < (0 + self.r) or self.y > self.Canvasheight - self.r):
             self.changePos(self.x, self.y)
-            return
+            self.heading = self.heading + 180
 
         xmove = math.sin(math.radians(self.heading)) * (self.velocity * (BALL_WEIGHT / ROBOT_WEIGHT))
         ymove = math.cos(math.radians(self.heading)) * (self.velocity * (BALL_WEIGHT / ROBOT_WEIGHT))
@@ -503,8 +513,6 @@ class Football:
         self.x = field.getsize()[0]/2
         self.y = field.getsize()[1]/2
         
-        messagebox.showinfo("Reset", "Ball has been reset to the center")
-        
         self.canvas.delete(self.ball)
         self.createball()
 
@@ -526,6 +534,9 @@ class Robot:
         self.fovbaselength = 200
         self.fovtriangle = 10000
         self.oldfov = None
+        
+        self.oldpath = None
+        self.pathline = 11000
         
         # create a hexagon that has center at x y
         self.width = 80
@@ -575,9 +586,12 @@ class Robot:
         self.y += ymove
         self.changePos(self.x, self.y)
     
-    def resetpos(self):
+    def resetpos(self, ourrobot):
         randx = random.randint(80, self.Canvaswidth - 80)
-        randy = random.randint(80, self.Canvasheight - 80)
+        if ourrobot:
+            randy = random.randint(self.Canvasheight / 2 - 80, self.Canvasheight - 80)
+        else:
+            randy = random.randint(80, self.Canvasheight / 2 - 80)
         
         self.x = randx
         self.y = randy
@@ -618,6 +632,20 @@ class Robot:
             self.canvas.delete(self.fovtriangle)
         
         return
+    
+    def path(self, heading, speed, color):
+        endx = self.x + speed * math.sin(math.radians(heading))
+        endy = self.y + speed * math.cos(math.radians(heading))
+        
+        self.oldpath = self.pathline
+        self.pathline = self.canvas.create_line(self.x, self.y, endx, endy, fill=color, width=2)
+        self.canvas.delete(self.oldpath)
+    
+    def hidepath(self):
+        if len(self.canvas.find_withtag(self.pathline)) > 0:
+            self.canvas.delete(self.pathline)
+        
+        return
 
 def StartSim():
     global startsim
@@ -637,24 +665,43 @@ def StartSim():
     OURGOAL, ENEMYGOAL = field.getgoals()
     
     gameinfo.setinitialtime(INITIALTIME)
-    pausetime = lastpausetime = ourscore = enemyscore = ball_heading = ball_speed = lasterror1 = lasterror2 = ballstoptime = 0
+    pausetime = lastpausetime = ourscore = enemyscore = ball_heading = ball_speed = lasterror1 = lasterror2 = ballstoptime = ballLastMovetime = 0
     balllastpos = ballcurrentpos = (0, 0)
     startsim = True
     pausesim = False
     ballhit = False
-    robotcolision = False
     ballreset = False
     
     while startsim:
+        
+        while pausesim:
+            controller.changePausebutton("Resume")
+            pausetime = time.time() - lasttime
+            window.update()
 
         while not pausesim:
             controller.changePausebutton("Pause")
+            
+            # robot fov
             if simsetup.showFov():
                 robot1.fov(True)
                 robot2.fov(False)
             else:
                 robot1.hidefov()
                 robot2.hidefov()
+            
+            # robot path
+            if settings.getshowpaths()["showpath1"].get():
+                robot1.path(ROBOT1_HEADING, ROBOT1_SPEED, "#CC0000")
+            else:
+                robot1.hidepath()
+                
+            if settings.getshowpaths()["showpath2"].get():
+                robot2.path(ROBOT2_HEADING, ROBOT2_SPEED, "#0000CC")
+            else:
+                robot2.hidepath()
+            
+            
             # finding for ball
             currentballpos = football.getPos()
             currentrobot1pos = robot1.getPos()
@@ -703,7 +750,6 @@ def StartSim():
             for i in field.getcanvas().find_overlapping(robot1.getPos()[0] - (robot1.width / 2) + 10, robot1.getPos()[1] - (robot1.height / 2) + 10, robot1.getPos()[0] + (robot1.width / 2) - 10, robot1.getPos()[1] + (robot1.height / 2) - 10):
                 
                 if i == robot2.getbodyid() and (not ballreset and ballcurrentpos == balllastpos):
-                    print("robot collision")
                     # calculate new heading and speed using heading and speed of robot 1 and 2
                     ROBOT1_HEADING = math.degrees(math.atan((math.sin(math.radians(ROBOT1_HEADING)) * ROBOT1_SPEED + math.sin(math.radians(ROBOT2_HEADING)) * ROBOT2_SPEED) / (math.cos(math.radians(ROBOT1_HEADING)) * ROBOT1_SPEED + math.cos(math.radians(ROBOT2_HEADING)) * ROBOT2_SPEED)))
                     
@@ -723,12 +769,12 @@ def StartSim():
                     
                     break
             
-            if (football.getPos()[1] - 50 < robot1.getPos()[1]) and (math.degrees(math.atan2(xr1_diff, yr1_diff)) > 25 or math.degrees(math.atan2(xr1_diff, yr1_diff)) < -25) and disr1 > 50:
+            if (football.getPos()[1] < robot1.getPos()[1]) and (math.degrees(math.atan2(xr1_diff, yr1_diff)) > 25 or math.degrees(math.atan2(xr1_diff, yr1_diff)) < -25) and disr1 > 50:
                 
                 ROBOT1_HEADING = 180
                 ROBOT1_SPEED = 125
             
-            if (football.getPos()[1] + 50 > robot2.getPos()[1] and (math.degrees(math.atan2(xr2_diff, yr2_diff)) > 155 or math.degrees(math.atan2(xr2_diff, yr2_diff)) > -155) and disr2 > 50):
+            if (football.getPos()[1] > robot2.getPos()[1] and (math.degrees(math.atan2(xr2_diff, yr2_diff)) > 155 or math.degrees(math.atan2(xr2_diff, yr2_diff)) > -155) and disr2 > 50):
 
                 ROBOT2_HEADING = 0
                 ROBOT2_SPEED = 125
@@ -754,7 +800,6 @@ def StartSim():
             
             # make robot 2 move
             robot2.move(ROBOT2_HEADING, ROBOT2_SPEED)
-            print(ROBOT2_HEADING, ROBOT2_SPEED)
                   
             if ballhit:
                 football.move()
@@ -764,9 +809,10 @@ def StartSim():
                     football.setspeed(0)
                     ballhit = False
             
+            # check for ball reset condition
             ballcurrentpos = football.getPos()
 
-            if balllastpos == ballcurrentpos and not football.getPos() == (field.getsize()[0]/2, field.getsize()[1]/2):
+            if football.velocity > 10 or football.velocity <= 0 and not football.getPos() == (field.getsize()[0]/2, field.getsize()[1]/2):
                 ballstoptime = int(time.time() - ballLastMovetime)
             else:
                 ballreset = False
@@ -775,6 +821,7 @@ def StartSim():
                 
             if ballstoptime >= 5:
                 football.resetpos()
+                messagebox.showinfo("Reset", "Ball has been reset to the center")
                 ball_speed = 0
                 football.setspeed(0)
                 ballreset = True
@@ -788,16 +835,18 @@ def StartSim():
                 if i == ENEMYGOAL and football.getPos()[1] <= football.r:
                     ourscore += 1
                     football.resetpos()
-                    robot1.resetpos()
-                    robot2.resetpos()
-                    ourgoal_log.append("Goal at " + str(gameinfo.gettimeelapsed()) + " (" + gameinfo.getscores() + ")")
+                    robot1.resetpos(False)
+                    robot2.resetpos(True)
+                    ourgoal_log.append("Goal at " + str(gameinfo.gettimeelapsed()) + " ({} - {})".format(ourscore, enemyscore))
+                    messagebox.showinfo("!GOAL!", "Our team scored a goal!")
                 
                 if i == OURGOAL and football.getPos()[1] >= field.getsize()[1] - football.r:
                     enemyscore += 1
                     football.resetpos()
-                    robot1.resetpos()
-                    robot2.resetpos()
-                    enemygoal_log.append("Goal at " + str(gameinfo.gettimeelapsed()) + " (" + gameinfo.getscores() + ")")
+                    robot1.resetpos(False)
+                    robot2.resetpos(True)
+                    enemygoal_log.append("Goal at " + str(gameinfo.gettimeelapsed()) + " ({} - {})".format(ourscore, enemyscore))
+                    messagebox.showinfo("!GOAL!", "Enemy team scored a goal!")
                     
                 
             
@@ -807,11 +856,6 @@ def StartSim():
             
         lasttime = time.time()    
         lastpausetime = pausetime
-        
-        while pausesim:
-            controller.changePausebutton("Resume")
-            pausetime = time.time() - lasttime
-            window.update()
     
     window.update()
         
@@ -859,11 +903,11 @@ def StopSim():
         "|{:<11}|{:<11}|".format("Friction", fieldinfo.getfriction()),
         "|-----------------------|\n",
         "Robot Settings:",
-        "|{:-<11}|{:-^11}|{:-^11}|".format("", "Robot 1", "Robot 2"),
-        "|{:<11}|{:<11}|{:<11}|".format("Kp", settings.getpidvalues()["Kp1"].get(), settings.getpidvalues()["Kp2"].get()),
-        "|{:<11}|{:<11}|{:<11}|".format("Ki", settings.getpidvalues()["Ki1"].get(), settings.getpidvalues()["Ki2"].get()),
-        "|{:<11}|{:<11}|{:<11}|".format("Kd", settings.getpidvalues()["Kd1"].get(), settings.getpidvalues()["Kd2"].get()),
-        "|-----------------------------------|\n",
+        "|{:-<11}|{:-^13}|{:-^13}|".format("", "Enemy Robot", "Player Robot"),
+        "|{:<11}|{:<13}|{:<13}|".format("Kp", settings.getpidvalues()["Kp1"].get(), settings.getpidvalues()["Kp2"].get()),
+        "|{:<11}|{:<13}|{:<13}|".format("Ki", settings.getpidvalues()["Ki1"].get(), settings.getpidvalues()["Ki2"].get()),
+        "|{:<11}|{:<13}|{:<13}|".format("Kd", settings.getpidvalues()["Kd1"].get(), settings.getpidvalues()["Kd2"].get()),
+        "|---------------------------------------|\n",
         "===============================================================",
         "Player's Goal:",
         ourgoal,
@@ -913,10 +957,7 @@ def SavePreferences():
         "ROBOTFOV": simsetup.showFov(),
     }
     
-    print(preferences)
-    
     filepath = filedialog.asksaveasfilename(title = "Save Preferences", filetypes = [("all files","*.*")])
-    print(filepath)
     if filepath == '':
         return
     else:
@@ -935,7 +976,7 @@ def LoadPreferences():
         file = open(filepath.name, "rb")
         load = pickle.load(file)
         
-        accept = messagebox.askokcancel("Load Preferences", "Do you want to load these content?\n\nField Friction: {}\n----Robot1----\nKp: {}\nKi: {}\nKd: {}\n----Robot2----\nKp: {}\nKi: {}\nKd: {}\nShow Robot FOV: {}".format(load["FRICTION"], load["PIDVALUE"]["Kp1"], load["PIDVALUE"]["Ki1"], load["PIDVALUE"]["Kd1"], load["PIDVALUE"]["Kp2"], load["PIDVALUE"]["Ki2"], load["PIDVALUE"]["Kd2"], load["ROBOTFOV"]))
+        accept = messagebox.askokcancel("Load Preferences", "Do you want to load these content?\n\nField Friction: {}\n----Enemy Robot----\nKp: {}\nKi: {}\nKd: {}\n----Player Robot----\nKp: {}\nKi: {}\nKd: {}\nShow Robot FOV: {}".format(load["FRICTION"], load["PIDVALUE"]["Kp1"], load["PIDVALUE"]["Ki1"], load["PIDVALUE"]["Kd1"], load["PIDVALUE"]["Kp2"], load["PIDVALUE"]["Ki2"], load["PIDVALUE"]["Kd2"], load["ROBOTFOV"]))
         
         if accept:
             fieldinfo.setfriction(load["FRICTION"])
@@ -960,8 +1001,8 @@ fieldinfo = FieldInfo(window, infoframe)
 settings = RobotSettings(window, infoframe)
 simsetup = SimulationSetup(window, infoframe)
 controller = Controller(window, infoframe)
-robot1 = Robot(field, random.randrange(int(-field.getsize()[0]/2) + 80, int(field.getsize()[0]/2) - 80), random.randrange(0, field.getsize()[1] - 80), 0, "#ff5cd3", 1)
-robot2 = Robot(field, random.randrange(int(-field.getsize()[0]/2) + 80, int(field.getsize()[0]/2) - 80), random.randrange(0, field.getsize()[1] - 80), 0, "#0ff279", 2)
+robot1 = Robot(field, random.randrange(int(-field.getsize()[0]/2) + 80, int(field.getsize()[0]/2) - 80), random.randrange(ROBOT_WIDTH, int((field.getsize()[1] - ROBOT_WIDTH) / 2)), 0, "#FF6666", 1)
+robot2 = Robot(field, random.randrange(int(-field.getsize()[0]/2) + 80, int(field.getsize()[0]/2) - 80), random.randrange(int((field.getsize()[1] + ROBOT_WIDTH) / 2), int(field.getsize()[1] - ROBOT_WIDTH)), 0, "#4D4DFF", 2)
 football = Football(field, 0, field.getsize()[1]/2)
 
 ourgoal_log = []
