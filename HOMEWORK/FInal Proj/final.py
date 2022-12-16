@@ -521,6 +521,12 @@ class Robot:
         self.deadend = False
         self.robotID = robotID
         
+        self.showfov = False
+        self.fovangle = 50
+        self.fovbaselength = 200
+        self.fovtriangle = 10000
+        self.oldfov = None
+        
         # create a hexagon that has center at x y
         self.width = 80
         self.height = 80
@@ -578,12 +584,46 @@ class Robot:
         
         self.changePos(self.x, self.y)
         self.velocity = 0
+    
+    def fov(self, ourrobot):
+        
+        SIDELENGTH = self.fovbaselength / (2 * math.cos(math.radians(self.fovangle)))
+
+        if ourrobot:
+            # isosceles triangle base at the center of the robot
+            x1 = self.x - self.fovbaselength / 2
+            y1 = self.y + SIDELENGTH
+            x2 = self.x + self.fovbaselength / 2
+            y2 = self.y + SIDELENGTH
+            x3 = self.x
+            y3 = self.y
+            
+            self.oldfov = self.fovtriangle
+            self.fovtriangle = self.canvas.create_polygon(x1, y1, x2, y2, x3, y3, fill="", outline="red", width=2)
+            self.canvas.delete(self.oldfov)
+        else:
+            x1 = self.x - self.fovbaselength / 2
+            y1 = self.y - SIDELENGTH
+            x2 = self.x + self.fovbaselength / 2
+            y2 = self.y - SIDELENGTH
+            x3 = self.x
+            y3 = self.y
+            
+            self.oldfov = self.fovtriangle
+            self.fovtriangle = self.canvas.create_polygon(x1, y1, x2, y2, x3, y3, fill="", outline="blue", width=2)
+            self.canvas.delete(self.oldfov)
+    
+    def hidefov(self):
+        if len(self.canvas.find_withtag(self.fovtriangle)) > 0:
+            self.canvas.delete(self.fovtriangle)
+        
+        return
 
 def StartSim():
     global startsim
     global pausesim
     
-    INITIALTIME = np.copy(time.time())
+    INITIALTIME = time.time()
     
     ROBOT1_INITIAL_SPEED = 200
     ROBOT2_INITIAL_SPEED = 200
@@ -609,7 +649,12 @@ def StartSim():
 
         while not pausesim:
             controller.changePausebutton("Pause")
-            
+            if simsetup.showFov():
+                robot1.fov(True)
+                robot2.fov(False)
+            else:
+                robot1.hidefov()
+                robot2.hidefov()
             # finding for ball
             currentballpos = football.getPos()
             currentrobot1pos = robot1.getPos()
@@ -800,21 +845,19 @@ def StopSim():
     
     pausesim = True
     startsim = False
-    controller.changePausebutton("Pause")
-    gameinfo.reset()
     
     ourgoal = "\n".join(ourgoal_log)
     enemygoal = "\n".join(enemygoal_log)
     
     content = [
-        "Game simulated at {}\n".format(time.strftime("%d-%m-%Y %H:%M:%S")),
-        "Time elapsed: {}\n".format(gameinfo.gettimeelapsed()),
+        "Game simulated at {}".format(time.strftime("%d-%m-%Y %H:%M:%S")),
+        "Time elapsed: {}".format(gameinfo.gettimeelapsed()),
         "Score: {}\n".format(gameinfo.getscores()),
         "===============================================================\n",
         "Field Settings:",
         "|{:-<11}|{:-^11}|".format("", "Value"),
         "|{:<11}|{:<11}|".format("Friction", fieldinfo.getfriction()),
-        "|------------------------|\n"
+        "|-----------------------|\n",
         "Robot Settings:",
         "|{:-<11}|{:-^11}|{:-^11}|".format("", "Robot 1", "Robot 2"),
         "|{:<11}|{:<11}|{:<11}|".format("Kp", settings.getpidvalues()["Kp1"].get(), settings.getpidvalues()["Kp2"].get()),
@@ -842,6 +885,9 @@ def StopSim():
         file.write(i + "\n")
     
     file.close()
+    
+    controller.changePausebutton("Pause")
+    gameinfo.reset()
 
 def PauseSim():
     global pausesim
